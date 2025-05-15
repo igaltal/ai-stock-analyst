@@ -1,174 +1,32 @@
-import yfinance as yf
 import pandas as pd
 import numpy as np
-from newsapi import NewsApiClient
 import openai
 from datetime import datetime, timedelta
 import json
-import time
-import requests
 import random
+from app.models.data_sources import FinancialDataManager
 
 class StockAnalyzer:
     """Class for analyzing stocks using AI and news data."""
     
-    def __init__(self, news_api_key, openai_api_key):
+    def __init__(self, news_api_key, openai_api_key, alpha_vantage_api_key=None):
         """Initialize with required API keys."""
-        self.news_api = NewsApiClient(api_key=news_api_key)
         self.openai_api_key = openai_api_key
         openai.api_key = openai_api_key
         
+        # Initialize the data manager with all available API keys
+        self.data_manager = FinancialDataManager(
+            news_api_key=news_api_key,
+            alpha_vantage_api_key=alpha_vantage_api_key
+        )
+    
     def fetch_stock_data(self, ticker, period="1mo"):
-        """Fetch historical stock data with fallback strategies."""
-        # Add random delay to avoid rate limiting
-        time.sleep(random.uniform(1, 3))
-        
-        # Try several methods to get stock data
-        try:
-            # Method 1: Use yfinance's direct download method
-            data = self._get_data_using_download(ticker, period)
-            if not data.empty and len(data) > 5:
-                return data
-                
-            # Method 2: Try yfinance Ticker approach with minimal info
-            data = self._get_data_using_ticker(ticker, period)
-            if not data.empty and len(data) > 5:
-                return data
-                
-            # Method 3: Use direct API request with different user agent
-            data = self._get_data_using_direct_api(ticker, period)
-            if not data.empty and len(data) > 5:
-                return data
-                
-            raise ValueError(f"Could not retrieve data for {ticker} using any method")
-            
-        except Exception as e:
-            # Create dummy data for demo purposes if all else fails
-            print(f"All methods failed for {ticker}: {str(e)}. Creating demo data.")
-            return self._create_demo_data(ticker)
-    
-    def _get_data_using_download(self, ticker, period):
-        """Get data using yfinance download method."""
-        try:
-            data = yf.download(
-                ticker,
-                period=period,
-                progress=False,
-                timeout=10
-            )
-            return data
-        except Exception as e:
-            print(f"Download method failed: {str(e)}")
-            return pd.DataFrame()
-    
-    def _get_data_using_ticker(self, ticker, period):
-        """Get data using Ticker object with minimal info."""
-        try:
-            stock = yf.Ticker(ticker)
-            # Avoid getting full info which often triggers rate limits
-            data = stock.history(period=period)
-            return data
-        except Exception as e:
-            print(f"Ticker method failed: {str(e)}")
-            return pd.DataFrame()
-    
-    def _get_data_using_direct_api(self, ticker, period):
-        """Get data using direct API request with custom headers."""
-        try:
-            # Convert period to interval
-            now = datetime.now()
-            if period == "1mo":
-                start = now - timedelta(days=30)
-            elif period == "3mo":
-                start = now - timedelta(days=90)
-            else:
-                start = now - timedelta(days=30)  # Default to 1mo
-                
-            # Format dates for API
-            period1 = int(start.timestamp())
-            period2 = int(now.timestamp())
-            
-            # Use direct API with custom headers to avoid rate limits
-            url = f"https://query1.finance.yahoo.com/v7/finance/download/{ticker}?period1={period1}&period2={period2}&interval=1d&events=history"
-            
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-            
-            response = requests.get(url, headers=headers, timeout=10)
-            if response.status_code == 200:
-                # Create DataFrame from CSV content
-                from io import StringIO
-                data = pd.read_csv(StringIO(response.text), parse_dates=['Date'])
-                data.set_index('Date', inplace=True)
-                return data
-            else:
-                print(f"Direct API request failed with status {response.status_code}")
-                return pd.DataFrame()
-        except Exception as e:
-            print(f"Direct API method failed: {str(e)}")
-            return pd.DataFrame()
-    
-    def _create_demo_data(self, ticker):
-        """Create demo data for demonstration when all other methods fail."""
-        print(f"Creating demo data for {ticker}")
-        # Create a date range for the last 30 days
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=30)
-        dates = pd.date_range(start=start_date, end=end_date, freq='D')
-        
-        # Generate random prices around $150 (for demo purposes)
-        base_price = 150.0
-        # Create price that trends slightly upward
-        closes = [base_price + (i * 0.5) + random.uniform(-5, 5) for i in range(len(dates))]
-        
-        # Create dataframe
-        data = pd.DataFrame({
-            'Open': closes,
-            'High': [price + random.uniform(0, 2) for price in closes],
-            'Low': [price - random.uniform(0, 2) for price in closes],
-            'Close': closes,
-            'Volume': [int(random.uniform(5000000, 15000000)) for _ in range(len(dates))]
-        }, index=dates)
-        
-        return data
+        """Fetch historical stock data using multiple sources."""
+        return self.data_manager.get_stock_data(ticker, period)
     
     def fetch_news(self, ticker, company_name=None, days=7):
         """Fetch news articles related to the stock."""
-        try:
-            # Use company name if provided, otherwise use ticker
-            query = company_name if company_name else ticker
-            
-            # Calculate the date range for news
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=days)
-            
-            # Format dates for NewsAPI
-            from_date = start_date.strftime('%Y-%m-%d')
-            to_date = end_date.strftime('%Y-%m-%d')
-            
-            # Fetch news articles
-            news = self.news_api.get_everything(
-                q=query,
-                from_param=from_date,
-                to=to_date,
-                language='en',
-                sort_by='relevancy',
-                page_size=10
-            )
-            
-            if news['totalResults'] == 0:
-                # If no results for company name, try ticker
-                if company_name:
-                    return self.fetch_news(ticker, None, days)
-                else:
-                    return []
-            
-            return news['articles']
-        except Exception as e:
-            print(f"Failed to fetch news for {ticker}: {str(e)}")
-            # Return empty list on failure
-            return []
+        return self.data_manager.get_news(ticker, company_name, days)
     
     def analyze_sentiment_with_ai(self, news_articles):
         """Use OpenAI to analyze news sentiment and provide investment recommendation."""
@@ -290,39 +148,20 @@ class StockAnalyzer:
     
     def get_company_name(self, ticker):
         """Get the company name for a given ticker."""
-        try:
-            # Add common company names for popular tickers to avoid API calls
-            common_companies = {
-                'AAPL': 'Apple Inc.',
-                'MSFT': 'Microsoft Corporation',
-                'GOOGL': 'Alphabet Inc.',
-                'AMZN': 'Amazon.com, Inc.',
-                'META': 'Meta Platforms, Inc.',
-                'TSLA': 'Tesla, Inc.',
-                'NVDA': 'NVIDIA Corporation',
-                'NFLX': 'Netflix, Inc.',
-                'JPM': 'JPMorgan Chase & Co.',
-                'V': 'Visa Inc.'
-            }
-            
-            # Check if ticker is in our common list
-            if ticker in common_companies:
-                return common_companies[ticker]
-            
-            # Fallback to API
-            stock = yf.Ticker(ticker)
-            info = stock.info
-            return info.get('longName', ticker)
-        except:
-            # Return ticker if can't get company name
-            return ticker
+        company_info = self.data_manager.get_company_info(ticker)
+        return company_info['name']
+    
+    def get_company_info(self, ticker):
+        """Get detailed company information."""
+        return self.data_manager.get_company_info(ticker)
     
     def analyze(self, ticker):
         """Perform complete analysis on a stock ticker."""
         ticker = ticker.upper()
         
-        # Try to get company name first to avoid rate limits
-        company_name = self.get_company_name(ticker)
+        # Get company information
+        company_info = self.get_company_info(ticker)
+        company_name = company_info['name']
         
         # Fetch news articles
         news_articles = self.fetch_news(ticker, company_name)
@@ -359,6 +198,7 @@ class StockAnalyzer:
             'price_change': price_change,
             'price_change_pct': price_change_pct,
             'analysis': ai_analysis,
+            'company_info': company_info,  # Add complete company info
             'news': news_articles[:5],  # Return top 5 news articles
             'price_data': price_data
         }

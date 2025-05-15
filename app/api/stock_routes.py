@@ -18,7 +18,8 @@ def analyze_stock():
         # Create stock analyzer with API keys from app config
         analyzer = StockAnalyzer(
             news_api_key=current_app.config['NEWS_API_KEY'],
-            openai_api_key=current_app.config['OPENAI_API_KEY']
+            openai_api_key=current_app.config['OPENAI_API_KEY'],
+            alpha_vantage_api_key=current_app.config['ALPHA_VANTAGE_API_KEY']
         )
         
         # Perform analysis

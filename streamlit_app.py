@@ -50,6 +50,19 @@ if submitted and ticker:
                     # Stock information and recommendation
                     st.subheader(f"{data['company_name']} ({data['ticker']})")
                     
+                    # Company information
+                    if 'company_info' in data:
+                        company_info = data['company_info']
+                        info_cols = st.columns(2)
+                        with info_cols[0]:
+                            st.write("**Sector:** ", company_info.get('sector', 'N/A'))
+                            st.write("**Industry:** ", company_info.get('industry', 'N/A'))
+                            st.write("**Country:** ", company_info.get('country', 'N/A'))
+                        with info_cols[1]:
+                            st.write("**Employees:** ", f"{company_info.get('employees', 0):,}" if company_info.get('employees', 0) else 'N/A')
+                            if company_info.get('website'):
+                                st.write("**Website:** ", company_info.get('website'))
+                    
                     # Current price and metrics
                     price_metrics = st.container()
                     with price_metrics:
@@ -63,6 +76,11 @@ if submitted and ticker:
                         
                         price_col2.metric("Price Change (30d)", delta_value, delta_color=delta_color)
                         price_col3.metric("Sentiment", data['analysis']['sentiment'])
+                    
+                    # Company description (if available)
+                    if 'company_info' in data and data['company_info'].get('description'):
+                        with st.expander("Company Description"):
+                            st.write(data['company_info']['description'])
                     
                     # Price trend chart
                     st.subheader("Price Trend (Last 30 Days)")
@@ -106,11 +124,23 @@ if submitted and ticker:
                     
                     # News articles
                     st.subheader("Recent News")
+                    
+                    if not data['news']:
+                        st.info("No recent news articles found for this company.")
+                    
                     for article in data['news']:
                         st.markdown(f"**{article['title']}**")
-                        st.markdown(f"*{article['publishedAt'][:10]}* - {article['source']['name']}")
-                        st.markdown(f"{article['description']}")
-                        st.markdown(f"[Read more]({article['url']})")
+                        published_date = article.get('publishedAt', '')[:10] if article.get('publishedAt') else ''
+                        source_name = article.get('source', {}).get('name', '') if article.get('source') else ''
+                        
+                        if published_date or source_name:
+                            st.markdown(f"*{published_date}*{' - ' + source_name if source_name else ''}")
+                        
+                        st.markdown(f"{article.get('description', '')}")
+                        
+                        if article.get('url'):
+                            st.markdown(f"[Read more]({article['url']})")
+                        
                         st.markdown("---")
             else:
                 st.error(f"Error: {response.json().get('error', 'Unknown error')}")
@@ -130,7 +160,7 @@ else:
     3. AI analyzes the news sentiment and market trends
     4. You receive a clear investment recommendation: Buy, Hold, or Sell
     
-    *Powered by OpenAI's language models and real-time market data*
+    *Powered by AI models and real-time market data from multiple sources*
     """)
     
     # Disclaimer
