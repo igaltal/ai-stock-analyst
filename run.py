@@ -9,13 +9,16 @@ import argparse
 def start_api():
     """Start the Flask API server."""
     print("Starting Flask API...")
-    api_process = subprocess.Popen(['python', 'app.py'])
+    python_path = sys.executable
+    api_process = subprocess.Popen([python_path, 'app.py'])
     return api_process
 
 def start_ui():
     """Start the Streamlit UI."""
     print("Starting Streamlit UI...")
-    ui_process = subprocess.Popen(['streamlit', 'run', 'streamlit_app.py'])
+    venv_dir = os.path.dirname(os.path.dirname(sys.executable))
+    streamlit_path = os.path.join(venv_dir, 'bin', 'streamlit')
+    ui_process = subprocess.Popen([streamlit_path, 'run', 'streamlit_app.py'])
     return ui_process
 
 def signal_handler(sig, frame):
