@@ -1,5 +1,8 @@
 .PHONY: setup test run run-api run-ui clean
 
+# Python executable path
+PYTHON = venv/bin/python
+
 # Set up the virtual environment and install dependencies
 setup:
 	python -m venv venv
@@ -7,19 +10,19 @@ setup:
 
 # Run all tests
 test:
-	python -m unittest discover -s tests
+	$(PYTHON) -m unittest discover -s tests
 
 # Run both API and UI
 run:
-	python run.py
+	$(PYTHON) run.py
 
 # Run only the API
 run-api:
-	python run.py --api-only
+	$(PYTHON) run.py --api-only
 
 # Run only the UI
 run-ui:
-	python run.py --ui-only
+	$(PYTHON) run.py --ui-only
 
 # Clean temporary files and caches
 clean:
